@@ -76,9 +76,9 @@ export function ProblemSection({ data }: { data: any }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {modules.map((mod, i) => (
-          <Card key={mod.title} className="bg-white/5 border-white/10 hover:bg-white/10 transition-colors backdrop-blur-sm">
+          <Card key={mod.title} className="bg-white/5 border-white/10 hover:bg-white/10 transition-colors backdrop-blur-sm min-h-[180px] flex flex-col justify-between">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-white">
                 {mod.title}
@@ -86,14 +86,10 @@ export function ProblemSection({ data }: { data: any }) {
               <mod.icon className={cn("h-4 w-4", mod.color)} />
             </CardHeader>
             <CardContent>
-              <div className="flex justify-between items-end mb-2">
-                <div>
-                  <div className="text-2xl font-bold text-white">{mod.metric}</div>
-                  <p className="text-xs text-muted-foreground mt-1">{mod.desc}</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-primary font-medium">Target: {mod.target}</div>
-                </div>
+              <div className="flex flex-col gap-1 mb-4">
+                <div className="text-2xl font-bold text-white">{mod.metric}</div>
+                <p className="text-xs text-muted-foreground">{mod.desc}</p>
+                <div className="text-xs text-primary font-medium mt-1">Target: {mod.target}</div>
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">

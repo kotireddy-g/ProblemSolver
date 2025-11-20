@@ -146,20 +146,19 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Left: Matrix */}
-                <div className="lg:col-span-2">
-                  <MatrixGrid 
-                    data={data.matrix} 
-                    onCellClick={(c, v, cell) => setSelectedCell({category: c, velocity: v, cell})} 
-                  />
-                </div>
-
-                {/* Right: Problems */}
-                <div className="lg:col-span-1">
-                   <ProblemSection data={data} />
-                </div>
+              {/* Matrix Grid - Full Width */}
+              <div className="w-full">
+                <MatrixGrid 
+                  data={data.matrix} 
+                  onCellClick={(c, v, cell) => setSelectedCell({category: c, velocity: v, cell})} 
+                />
               </div>
+
+              {/* Problems Section - Full Width */}
+              <div className="w-full">
+                  <ProblemSection data={data} />
+              </div>
+
             </motion.div>
           )}
         </AnimatePresence>
