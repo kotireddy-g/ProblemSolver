@@ -3,8 +3,88 @@ import { ArrowLeft, CheckCircle2, Database, Layers, Lightbulb, Lock, Smartphone,
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { PrototypeView, PrototypeData } from "@/components/roadmap/prototype-modal";
+
+const roadmapData: Record<string, PrototypeData> = {
+  "01": {
+    id: "01",
+    title: "The 'Edge' Capture",
+    subtitle: "Mobile-First GRN & Receiving",
+    description: "A dedicated mobile application for kitchen and housekeeping staff to capture proof of delivery at the source. It works offline, uses AI to identify items, and eliminates manual data entry errors.",
+    techStack: [
+      { name: "React Native", type: "frontend" },
+      { name: "TensorFlow Lite", type: "ai" },
+      { name: "Google Vision API", type: "ai" },
+      { name: "Node.js", type: "backend" },
+      { name: "Offline Sync", type: "infra" }
+    ],
+    features: [
+      "Offline-first capability for basements/kitchens",
+      "AI Object Detection (Vegetables, Crates, Linen)",
+      "Automated Quality Grading via Image Analysis",
+      "Instant GRN Generation & ERP Sync"
+    ]
+  },
+  "02": {
+    id: "02",
+    title: "The 'Trust' Portal",
+    subtitle: "Vendor Visibility & Payment Dashboard",
+    description: "A transparent, self-service portal for vendors to track their invoices and payments in real-time. This reduces support calls by 90% and builds trust within the supply chain.",
+    techStack: [
+      { name: "React.js", type: "frontend" },
+      { name: "Stripe Connect", type: "infra" },
+      { name: "WhatsApp API", type: "infra" },
+      { name: "Express.js", type: "backend" }
+    ],
+    features: [
+      "Real-time Invoice Status Tracking",
+      "Automated WhatsApp Payment Alerts",
+      "Digital Ledger Reconciliation",
+      "Dispute Resolution Chat"
+    ]
+  },
+  "03": {
+    id: "03",
+    title: "The 'Core' Automation",
+    subtitle: "AI-Driven 3-Way Matching",
+    description: "An intelligent engine that automatically validates invoices against Purchase Orders and Goods Receipt Notes. It handles complex GST calculations and only flags exceptions for human review.",
+    techStack: [
+      { name: "Python", type: "backend" },
+      { name: "Azure Form Recognizer", type: "ai" },
+      { name: "Spacy NLP", type: "ai" },
+      { name: "PostgreSQL", type: "infra" }
+    ],
+    features: [
+      "OCR Data Extraction (99% Accuracy)",
+      "Automated 3-Way Matching Logic",
+      "GST Compliance & Tax Validation",
+      "Exception Handling Workflow"
+    ]
+  },
+  "04": {
+    id: "04",
+    title: "Predictive Intelligence",
+    subtitle: "Future Demand Forecasting",
+    description: "A machine learning layer that analyzes historical consumption patterns to predict future needs. It suggests reorder quantities based on events, occupancy, and seasonal trends.",
+    techStack: [
+      { name: "Python Pandas", type: "backend" },
+      { name: "Facebook Prophet", type: "ai" },
+      { name: "Scikit-learn", type: "ai" },
+      { name: "Redis", type: "infra" }
+    ],
+    features: [
+      "Consumption Pattern Analysis",
+      "Event-based Demand Spikes",
+      "Automated Purchase Requisitions",
+      "Wastage Anomaly Detection"
+    ]
+  }
+};
 
 export default function RoadmapPage() {
+  const [selectedPrototype, setSelectedPrototype] = useState<PrototypeData | null>(null);
+
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
       {/* Header */}
@@ -100,7 +180,7 @@ export default function RoadmapPage() {
             </div>
             <div>
               <h3 className="text-2xl font-bold text-white">Implementation Roadmap</h3>
-              <p className="text-muted-foreground">A phased approach to solving the 6 bottlenecks.</p>
+              <p className="text-muted-foreground">Click on any module below to view the interactive prototype & tech stack.</p>
             </div>
           </div>
 
@@ -115,6 +195,7 @@ export default function RoadmapPage() {
               icon={Smartphone}
               color="bg-purple-500"
               details="Deploy offline-first mobile apps for Kitchen (F&B) and Housekeeping. Staff takes photos of goods; AI auto-generates the GRN. No more manual entry."
+              onClick={() => setSelectedPrototype(roadmapData["01"])}
             />
             
             <RoadmapItem 
@@ -124,6 +205,7 @@ export default function RoadmapPage() {
               icon={Lock}
               color="bg-amber-500"
               details="Launch Vendor Portal. Suppliers see real-time status: 'Invoice Received' -> 'Approved' -> 'Payment Scheduled'. Reduces 90% of phone calls."
+              onClick={() => setSelectedPrototype(roadmapData["02"])}
             />
 
             <RoadmapItem 
@@ -133,6 +215,7 @@ export default function RoadmapPage() {
               icon={CheckCircle2}
               color="bg-green-500"
               details="Activate AI Matching Engine. System automatically compares PO (Contract) vs. GRN (Received) vs. Invoice (Billed). Only exceptions go to humans."
+              onClick={() => setSelectedPrototype(roadmapData["03"])}
             />
 
             <RoadmapItem 
@@ -142,11 +225,20 @@ export default function RoadmapPage() {
               icon={Lightbulb}
               color="bg-blue-500"
               details="System starts predicting consumption patterns. 'You usually buy 50kg tomatoes on Fridays, but you have 20kg stock. Order 30kg?'"
+              onClick={() => setSelectedPrototype(roadmapData["04"])}
             />
           </div>
         </section>
-
       </main>
+
+      {/* Prototype Modal */}
+      {selectedPrototype && (
+        <PrototypeView 
+          data={selectedPrototype} 
+          isOpen={!!selectedPrototype} 
+          onClose={() => setSelectedPrototype(null)} 
+        />
+      )}
     </div>
   );
 }
@@ -173,31 +265,35 @@ function DataCard({ title, description, points, delay }: { title: string, descri
   );
 }
 
-function RoadmapItem({ number, title, subtitle, details, icon: Icon, color, detailsColor = "text-gray-400" }: any) {
+function RoadmapItem({ number, title, subtitle, details, icon: Icon, color, detailsColor = "text-gray-400", onClick }: any) {
   return (
     <motion.div 
       initial={{ opacity: 0, x: -20 }}
       whileInView={{ opacity: 1, x: 0 }}
       viewport={{ once: true }}
-      className="flex gap-6 md:gap-10 relative"
+      onClick={onClick}
+      className="flex gap-6 md:gap-10 relative group cursor-pointer"
     >
       <div className="relative z-10 shrink-0">
-        <div className={cn("h-14 w-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg", color)}>
+        <div className={cn("h-14 w-14 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg transition-transform group-hover:scale-110", color)}>
           {number}
         </div>
       </div>
       
-      <div className="glass-panel p-6 rounded-2xl flex-1 border-l-4 border-l-primary/50">
+      <div className="glass-panel p-6 rounded-2xl flex-1 border-l-4 border-l-primary/50 transition-all duration-300 group-hover:border-l-8 group-hover:bg-white/10">
         <div className="flex items-start justify-between mb-2">
           <div>
-            <h4 className="text-xl font-bold text-white">{title}</h4>
+            <h4 className="text-xl font-bold text-white group-hover:text-primary transition-colors">{title}</h4>
             <span className="text-sm font-medium text-primary uppercase tracking-wider">{subtitle}</span>
           </div>
-          <Icon className="h-6 w-6 text-muted-foreground" />
+          <Icon className="h-6 w-6 text-muted-foreground group-hover:text-white transition-colors" />
         </div>
         <p className={cn("mt-2 text-sm leading-relaxed", detailsColor)}>
           {details}
         </p>
+        <div className="mt-4 flex items-center text-xs text-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+          View Prototype & Tech Stack →
+        </div>
       </div>
     </motion.div>
   );
