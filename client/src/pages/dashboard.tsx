@@ -6,9 +6,10 @@ import { generateSyntheticData, DashboardData, MatrixCell } from "@/lib/procurem
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Play, Activity, TrendingUp, DollarSign } from "lucide-react";
+import { Upload, Play, Activity, TrendingUp, DollarSign, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 export default function DashboardPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -44,6 +45,14 @@ export default function DashboardPage() {
           </div>
           
           <div className="flex items-center gap-4">
+            {hasData && (
+              <Link href="/roadmap">
+                <Button variant="outline" className="border-primary/50 text-primary hover:bg-primary/10">
+                  View Solution Roadmap
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            )}
             {!hasData && (
               <Button 
                 onClick={handleStartAnalysis} 
@@ -59,7 +68,7 @@ export default function DashboardPage() {
               </Button>
             )}
             {hasData && (
-              <div className="flex items-center gap-2">
+              <div className="hidden md:flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Data Source:</span>
                 <span className="text-sm font-mono text-primary bg-primary/10 px-2 py-1 rounded">raw_procurement_data.csv</span>
               </div>
