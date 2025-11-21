@@ -465,67 +465,119 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* Details Drawer */}
+      {/* Details Drawer - Streamlined */}
       <Sheet open={!!selectedCell} onOpenChange={() => setSelectedCell(null)}>
-        <SheetContent className="bg-[#0f0f23] border-l border-white/10 text-white w-[400px] sm:w-[540px]">
+        <SheetContent className="bg-[#0f0f23] border-l border-white/10 text-white w-[400px] sm:w-[540px]" data-testid="sheet-details">
           {selectedCell && (
             <>
-              <SheetHeader>
-                <SheetTitle className="text-2xl font-display text-primary">
-                  {selectedCell.category}
-                </SheetTitle>
-                <SheetDescription className="text-gray-400">
-                  Velocity: <span className="text-white font-mono uppercase">{selectedCell.velocity}</span>
-                </SheetDescription>
+              <SheetHeader className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <SheetTitle className="text-2xl font-display text-primary" data-testid="text-category">
+                    {selectedCell.category}
+                  </SheetTitle>
+                  <Badge 
+                    variant={selectedCell.cell.status === 'critical' ? 'destructive' : selectedCell.cell.status === 'warning' ? 'secondary' : 'default'} 
+                    className="uppercase text-xs"
+                    data-testid="badge-status"
+                  >
+                    {selectedCell.cell.status}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Velocity:</span>
+                  <Badge variant="outline" className="text-white font-mono uppercase text-xs" data-testid="badge-velocity">
+                    {selectedCell.velocity.replace('-', ' ')}
+                  </Badge>
+                </div>
               </SheetHeader>
               
               <div className="mt-8 space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                    <div className="text-xs text-muted-foreground mb-1">Efficiency</div>
-                    <div className={cn(
-                      "text-2xl font-bold",
-                      selectedCell.cell.efficiency < 80 ? "text-orange-400" : "text-green-400"
-                    )}>
-                      {selectedCell.cell.efficiency}%
+                {/* Efficiency Card */}
+                <div className="p-5 rounded-lg bg-gradient-to-br from-white/5 to-white/10 border border-white/10">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-2">Efficiency Rating</div>
+                      <div className={cn(
+                        "text-3xl font-bold",
+                        selectedCell.cell.efficiency < 80 ? "text-orange-400" : 
+                        selectedCell.cell.efficiency > 100 ? "text-red-400" : "text-green-400"
+                      )} data-testid="text-efficiency">
+                        {selectedCell.cell.efficiency}%
+                      </div>
                     </div>
-                  </div>
-                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                     <div className="text-xs text-muted-foreground mb-1">Status</div>
-                     <div className="text-lg font-medium capitalize text-white">
-                       {selectedCell.cell.status}
-                     </div>
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground mb-1">Allocated</div>
+                      <div className="text-sm font-mono text-white">
+                        ₹{(selectedCell.cell.allocated / 1000).toFixed(1)}k
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-2 mb-1">Consumed</div>
+                      <div className="text-sm font-mono text-white">
+                        ₹{(selectedCell.cell.consumed / 1000).toFixed(1)}k
+                      </div>
+                    </div>
                   </div>
                 </div>
 
+                {/* Top Products */}
                 <div>
-                  <h3 className="text-sm font-medium text-gray-300 mb-4">Top Products Impacted</h3>
-                  <div className="space-y-3">
-                    {selectedCell.cell.products.map((prod, i) => (
-                      <div key={i} className="flex items-center justify-between p-3 rounded bg-white/5 hover:bg-white/10 transition-colors">
-                        <div>
-                          <div className="text-sm font-medium text-white">{prod.name}</div>
-                          <div className="text-xs text-gray-500">Cycle: {prod.purchaseCycle}</div>
+                  <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                    Top Products Impacted
+                    <Badge variant="secondary" className="text-xs">{selectedCell.cell.products.length}</Badge>
+                  </h3>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {selectedCell.cell.products.slice(0, 7).map((prod, i) => (
+                      <div 
+                        key={i} 
+                        className="p-3 rounded-lg bg-white/5 border border-white/5 hover-elevate"
+                        data-testid={`product-${i}`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-white truncate">{prod.name}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs">
+                                Cycle: {prod.purchaseCycle}
+                              </Badge>
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-right">
-                           <div className="text-sm font-mono text-primary">Qty: {prod.quantity}</div>
-                           <div className="text-xs text-red-400">Waste: {prod.wastage}%</div>
+                        <div className="grid grid-cols-3 gap-2 mt-2">
+                          <div>
+                            <div className="text-xs text-muted-foreground">Qty</div>
+                            <div className="text-sm font-semibold text-primary">{prod.quantity}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Cost</div>
+                            <div className="text-sm font-semibold text-white">₹{(prod.cost / 1000).toFixed(1)}k</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Waste</div>
+                            <div className={cn(
+                              "text-sm font-semibold",
+                              prod.wastage > 5 ? "text-red-400" : "text-green-400"
+                            )}>{prod.wastage}%</div>
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                   <h4 className="text-sm font-bold text-blue-300 mb-2 flex items-center gap-2">
-                     <Activity className="h-4 w-4" /> Recommended Action
-                   </h4>
-                   <p className="text-xs text-blue-200/80 leading-relaxed">
-                     High wastage detected in this category. Consider implementing 
-                     <strong> GRN Automation</strong> to verify quality at entry and 
-                     <strong> 3-Way Matching</strong> to ensure invoice accuracy.
-                   </p>
-                </div>
+                {/* Recommended Action */}
+                {selectedCell.cell.efficiency < 90 && (
+                  <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                     <h4 className="text-sm font-bold text-blue-300 mb-2 flex items-center gap-2">
+                       <Activity className="h-4 w-4" /> Recommended Actions
+                     </h4>
+                     <ul className="text-xs text-blue-200/80 leading-relaxed space-y-1 list-disc list-inside">
+                       {selectedCell.cell.efficiency < 80 && (
+                         <li>Implement <strong>GRN Automation</strong> to verify quality at entry</li>
+                       )}
+                       <li>Enable <strong>3-Way Matching</strong> to ensure invoice accuracy</li>
+                       <li>Set up alerts for wastage exceeding 5%</li>
+                     </ul>
+                  </div>
+                )}
               </div>
             </>
           )}
