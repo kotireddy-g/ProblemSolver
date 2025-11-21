@@ -34,6 +34,16 @@ export interface ProblemData {
   qualityScore: string;
 }
 
+export interface CriticalIssue {
+  type: string;
+  title: string;
+  description: string;
+  impact: string;
+  severity: 'critical' | 'warning' | 'info';
+  automationLevel?: string;
+  target?: string;
+}
+
 export interface DashboardData {
   matrix: Record<string, Record<string, MatrixCell>>;
   outputs: {
@@ -50,6 +60,11 @@ export interface DashboardData {
     cost: number[];
     wastage: number[];
   };
+  criticalIssues?: CriticalIssue[];
+  totalRecords?: number;
+  revenueImpact?: number;
+  avgDelayDays?: number;
+  monthlyWaste?: number;
 }
 
 export const CATEGORIES = [
