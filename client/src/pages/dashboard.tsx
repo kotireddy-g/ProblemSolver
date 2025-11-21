@@ -3,20 +3,24 @@ import { TunnelAnimation } from "@/components/dashboard/tunnel-animation";
 import { MatrixGrid } from "@/components/dashboard/matrix-grid";
 import { ProblemSection } from "@/components/dashboard/problem-section";
 import { FileUpload } from "@/components/dashboard/file-upload";
+import { FileManager, UploadedFile } from "@/components/dashboard/file-manager";
 import { generateSyntheticData, DashboardData, MatrixCell } from "@/lib/procurement-data";
 import { processExcelFile } from "@/lib/excel-processor";
+import { processMultipleFiles, UploadedFileData } from "@/lib/multi-file-processor";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Upload, Play, Activity, TrendingUp, DollarSign, ArrowRight, Database, RefreshCw } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Upload, Play, Activity, TrendingUp, DollarSign, ArrowRight, Database, RefreshCw, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
 
 export default function DashboardPage() {
+  const [sessionId, setSessionId] = useState<string>('');
   const [mode, setMode] = useState<'prototype' | 'live'>('prototype');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasData, setHasData] = useState(false);
@@ -24,22 +28,50 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
   const [data, setData] = useState<DashboardData>(generateSyntheticData('monthly'));
   const [liveData, setLiveData] = useState<DashboardData | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [selectedCell, setSelectedCell] = useState<{category: string, velocity: string, cell: MatrixCell} | null>(null);
   const { toast } = useToast();
+
+  // Generate session ID on mount
+  useEffect(() => {
+    setSessionId(crypto.randomUUID());
+  }, []);
+
+  // Fetch uploaded files for session
+  const { data: filesData, refetch: refetchFiles } = useQuery<UploadedFile[]>({
+    queryKey: ['/api/files', sessionId],
+    enabled: mode === 'live' && !!sessionId,
+    queryFn: async () => {
+      if (!sessionId) return [];
+      try {
+        const res = await fetch(`/api/files/${sessionId}`);
+        if (!res.ok) return [];
+        return await res.json();
+      } catch {
+        return [];
+      }
+    }
+  });
+
+  // Update uploaded files from query
+  useEffect(() => {
+    if (filesData) {
+      setUploadedFiles(filesData);
+    }
+  }, [filesData]);
 
   // Reset when switching modes
   useEffect(() => {
     if (mode === 'prototype') {
-      setHasData(true); // Prototype always has data
+      setHasData(true);
       setData(generateSyntheticData(filter));
     } else {
-      // Live mode
       if (liveData) {
         setData(liveData);
         setHasData(true);
       } else {
         setHasData(false);
-        setData(generateSyntheticData('monthly')); // Fallback structure
+        setData(generateSyntheticData('monthly'));
       }
     }
   }, [mode, filter, liveData]);
@@ -48,9 +80,8 @@ export default function DashboardPage() {
     if (mode === 'live') {
       setShowUpload(true);
     } else {
-      // Prototype Simulation
       setIsAnalyzing(true);
-      setHasData(false); // Briefly hide data to show tunnel
+      setHasData(false);
       setTimeout(() => {
         setHasData(true);
         setIsAnalyzing(false); 
@@ -62,34 +93,127 @@ export default function DashboardPage() {
     }
   };
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (files: File[]) => {
     setShowUpload(false);
     setIsAnalyzing(true);
     setHasData(false);
 
     try {
-      // Wait 2 seconds for animation effect + processing
-      const processedData = await processExcelFile(file);
+      // Upload files to server
+      const formData = new FormData();
+      files.forEach((file) => {
+        formData.append('files', file);
+      });
+      formData.append('sessionId', sessionId);
+
+      const uploadedFilesData = await fetch('/api/files/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadedFilesData.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const uploadedFilesResponse: UploadedFile[] = await uploadedFilesData.json();
       
-      setTimeout(() => {
+      // Read file contents for processing
+      const fileDataPromises = files.map(async (file) => {
+        const content = await file.text();
+        return {
+          id: crypto.randomUUID(),
+          filename: file.name,
+          content: content,
+        } as UploadedFileData;
+      });
+
+      const fileData = await Promise.all(fileDataPromises);
+      
+      // Process files using multi-file processor
+      const processedData = await processMultipleFiles(fileData);
+      
+      setTimeout(async () => {
         setLiveData(processedData);
         setData(processedData);
         setHasData(true);
         setIsAnalyzing(false);
+        setUploadedFiles(uploadedFilesResponse);
+        
+        // Save analysis results
+        try {
+          await apiRequest('POST', '/api/analysis', {
+            sessionId,
+            data: processedData,
+          });
+        } catch (error) {
+          console.error('Failed to save analysis:', error);
+        }
+
+        // Refetch files
+        refetchFiles();
+        
         toast({
-          title: "File Processed Successfully",
-          description: `Analyzed ${file.name} with dynamic column mapping.`,
+          title: "Files Processed Successfully",
+          description: `Analyzed ${files.length} file(s) with multi-file processing.`,
         });
-      }, 3000); // 3s animation
+      }, 3000);
     } catch (error) {
       setIsAnalyzing(false);
       toast({
         title: "Processing Failed",
-        description: "Could not parse the Excel file. Please try again.",
+        description: error instanceof Error ? error.message : "Could not process files. Please try again.",
         variant: "destructive"
       });
     }
   };
+
+  const handleRemoveFile = async (fileId: string) => {
+    try {
+      setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
+      toast({
+        title: "File Removed",
+        description: "File has been removed from the session.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to remove file.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleResetAll = async () => {
+    try {
+      await apiRequest('DELETE', `/api/session/${sessionId}/reset`, undefined);
+      
+      setUploadedFiles([]);
+      setLiveData(null);
+      setHasData(false);
+      setData(generateSyntheticData('monthly'));
+      
+      queryClient.invalidateQueries({ queryKey: ['/api/files', sessionId] });
+      
+      toast({
+        title: "Session Reset",
+        description: "All files and analysis data have been cleared.",
+      });
+    } catch (error) {
+      toast({
+        title: "Reset Failed",
+        description: "Could not reset session. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAddMoreFiles = () => {
+    setShowUpload(true);
+  };
+
+  // Check if critical issues exist
+  const hasCriticalIssues = data.criticalIssues && data.criticalIssues.length > 0;
+  const criticalCount = data.criticalIssues?.filter(i => i.severity === 'critical').length || 0;
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -116,6 +240,7 @@ export default function DashboardPage() {
                   "rounded-full h-7 text-xs px-3 hover:bg-transparent hover:text-white",
                   mode === 'prototype' ? "bg-primary text-black hover:bg-primary hover:text-black" : "text-muted-foreground"
                 )}
+                data-testid="button-mode-prototype"
               >
                 Prototype
               </Button>
@@ -127,6 +252,7 @@ export default function DashboardPage() {
                   "rounded-full h-7 text-xs px-3 hover:bg-transparent hover:text-white",
                   mode === 'live' ? "bg-green-500 text-black hover:bg-green-500 hover:text-black" : "text-muted-foreground"
                 )}
+                data-testid="button-mode-live"
               >
                 Live Data
               </Button>
@@ -134,7 +260,7 @@ export default function DashboardPage() {
 
             {hasData && (
               <Link href="/roadmap">
-                <Button variant="outline" className="hidden md:flex border-primary/50 text-primary hover:bg-primary/10">
+                <Button variant="outline" className="hidden md:flex border-primary/50 text-primary hover:bg-primary/10" data-testid="button-view-roadmap">
                   View Solution Roadmap
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
@@ -145,6 +271,7 @@ export default function DashboardPage() {
               <Button 
                 onClick={handleStartAnalysis} 
                 className="bg-green-500 text-black hover:bg-green-600"
+                data-testid="button-upload-data"
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Upload Data
@@ -155,6 +282,7 @@ export default function DashboardPage() {
               <Button 
                 onClick={handleStartAnalysis} 
                 className="bg-primary text-black hover:bg-primary/90"
+                data-testid="button-run-analysis"
               >
                 <Play className="mr-2 h-4 w-4" />
                 Re-Run Analysis
@@ -162,7 +290,7 @@ export default function DashboardPage() {
             )}
 
             {isAnalyzing && (
-               <Button disabled className="bg-white/10 text-white">
+               <Button disabled className="bg-white/10 text-white" data-testid="button-processing">
                  <Activity className="mr-2 h-4 w-4 animate-spin" />
                  Processing...
                </Button>
@@ -173,13 +301,51 @@ export default function DashboardPage() {
 
       <main className="container mx-auto px-6 py-8 space-y-8">
         
+        {/* Critical Revenue Impact Banner */}
+        {hasCriticalIssues && hasData && (
+          <Alert className="bg-red-500/10 border-red-500/50 text-red-400" data-testid="alert-critical-issues">
+            <AlertTriangle className="h-5 w-5" />
+            <AlertDescription className="ml-2">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <p className="font-bold text-lg text-red-300">
+                    {criticalCount} Critical Issue{criticalCount !== 1 ? 's' : ''} Detected
+                  </p>
+                  <p className="text-sm text-red-400/80 mt-1">
+                    Revenue Impact: {data.revenueImpact ? `₹${(data.revenueImpact / 100000).toFixed(1)}L/month` : data.financial?.revenueLoss || 'High'} 
+                    {data.avgDelayDays ? ` • Avg Delay: ${data.avgDelayDays} days` : ''}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {data.criticalIssues?.slice(0, 3).map((issue, idx) => (
+                    <div key={idx} className="bg-red-500/20 px-3 py-2 rounded-lg border border-red-500/30" data-testid={`critical-issue-${idx}`}>
+                      <p className="text-xs font-medium text-red-200">{issue.type}</p>
+                      <p className="text-xs text-red-400/80">{issue.title}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* File Manager - Show when files are uploaded in live mode */}
+        {mode === 'live' && uploadedFiles.length > 0 && (
+          <FileManager 
+            files={uploadedFiles}
+            onRemoveFile={handleRemoveFile}
+            onResetAll={handleResetAll}
+            onAddMore={handleAddMoreFiles}
+          />
+        )}
+
         {/* Top Section: Tunnel & Controls */}
         <section className="space-y-6">
           <div className="flex justify-between items-center">
              <div className="flex items-center gap-3">
                 <h2 className="text-xl text-white font-medium">Data Ingestion Pipeline</h2>
                 {mode === 'live' && hasData && (
-                  <span className="text-xs bg-green-500/10 text-green-400 px-2 py-1 rounded border border-green-500/20 flex items-center gap-1">
+                  <span className="text-xs bg-green-500/10 text-green-400 px-2 py-1 rounded border border-green-500/20 flex items-center gap-1" data-testid="badge-live-source">
                     <Database className="h-3 w-3" /> Live Source
                   </span>
                 )}
@@ -188,10 +354,10 @@ export default function DashboardPage() {
              {hasData && (
                <Tabs defaultValue="monthly" onValueChange={(v) => setFilter(v as any)} className="w-[400px]">
                  <TabsList className="grid w-full grid-cols-4 bg-white/5">
-                   <TabsTrigger value="daily">Daily</TabsTrigger>
-                   <TabsTrigger value="weekly">Weekly</TabsTrigger>
-                   <TabsTrigger value="monthly">Monthly</TabsTrigger>
-                   <TabsTrigger value="yearly">Yearly</TabsTrigger>
+                   <TabsTrigger value="daily" data-testid="tab-daily">Daily</TabsTrigger>
+                   <TabsTrigger value="weekly" data-testid="tab-weekly">Weekly</TabsTrigger>
+                   <TabsTrigger value="monthly" data-testid="tab-monthly">Monthly</TabsTrigger>
+                   <TabsTrigger value="yearly" data-testid="tab-yearly">Yearly</TabsTrigger>
                  </TabsList>
                </Tabs>
              )}
@@ -210,7 +376,7 @@ export default function DashboardPage() {
             >
               {/* KPI Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="glass-panel p-4 rounded-xl flex items-center gap-4">
+                <div className="glass-panel p-4 rounded-xl flex items-center gap-4" data-testid="card-outliers">
                   <div className="p-3 rounded-full bg-red-500/20 text-red-400">
                     <AlertTriangleIcon />
                   </div>
@@ -219,7 +385,7 @@ export default function DashboardPage() {
                     <div className="text-xs text-muted-foreground">Outliers Detected</div>
                   </div>
                 </div>
-                <div className="glass-panel p-4 rounded-xl flex items-center gap-4">
+                <div className="glass-panel p-4 rounded-xl flex items-center gap-4" data-testid="card-normal">
                   <div className="p-3 rounded-full bg-green-500/20 text-green-400">
                     <CheckCircleIcon />
                   </div>
@@ -228,7 +394,7 @@ export default function DashboardPage() {
                     <div className="text-xs text-muted-foreground">Normal Operations</div>
                   </div>
                 </div>
-                <div className="glass-panel p-4 rounded-xl flex items-center gap-4">
+                <div className="glass-panel p-4 rounded-xl flex items-center gap-4" data-testid="card-delayed">
                   <div className="p-3 rounded-full bg-orange-500/20 text-orange-400">
                     <ClockIcon />
                   </div>
@@ -237,7 +403,7 @@ export default function DashboardPage() {
                     <div className="text-xs text-muted-foreground">Delayed Payments</div>
                   </div>
                 </div>
-                <div className="glass-panel p-4 rounded-xl flex items-center gap-4">
+                <div className="glass-panel p-4 rounded-xl flex items-center gap-4" data-testid="card-health">
                   <div className="p-3 rounded-full bg-blue-500/20 text-blue-400">
                     <TrendingUp className="h-5 w-5" />
                   </div>
@@ -266,12 +432,12 @@ export default function DashboardPage() {
         </AnimatePresence>
 
         {!hasData && !isAnalyzing && (
-          <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed border-white/10 rounded-xl">
+          <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed border-white/10 rounded-xl" data-testid="empty-state">
              {mode === 'live' ? (
                <>
                  <Upload className="h-12 w-12 mb-4 opacity-50" />
                  <p>Upload raw procurement data to begin analysis</p>
-                 <Button variant="link" onClick={() => setShowUpload(true)} className="text-primary mt-2">
+                 <Button variant="link" onClick={() => setShowUpload(true)} className="text-primary mt-2" data-testid="link-upload">
                    Click to Upload
                  </Button>
                </>
@@ -279,7 +445,7 @@ export default function DashboardPage() {
                <>
                  <Database className="h-12 w-12 mb-4 opacity-50" />
                  <p>Prototype Mode Active</p>
-                 <Button variant="link" onClick={handleStartAnalysis} className="text-primary mt-2">
+                 <Button variant="link" onClick={handleStartAnalysis} className="text-primary mt-2" data-testid="link-start-simulation">
                    Start Simulation
                  </Button>
                </>
