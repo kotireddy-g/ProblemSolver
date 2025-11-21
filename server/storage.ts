@@ -86,6 +86,10 @@ export class MemStorage implements IStorage {
       ...insertResult,
       id,
       analyzedAt: new Date(),
+      revenueImpact: insertResult.revenueImpact ?? null,
+      avgDelayDays: insertResult.avgDelayDays ?? null,
+      monthlyWaste: insertResult.monthlyWaste ?? null,
+      criticalIssues: (insertResult.criticalIssues as Record<string, any>[] | null) ?? null,
     };
     this.analysisResults.set(insertResult.sessionId, result);
     return result;

@@ -50,7 +50,7 @@ export const analysisResults = pgTable("analysis_results", {
   monthlyWaste: real("monthly_waste"),
   matrixData: json("matrix_data").$type<Record<string, Record<string, any>>>().notNull(),
   problemData: json("problem_data").$type<Record<string, any>>().notNull(),
-  criticalIssues: json("critical_issues").$type<Array<Record<string, any>>>(),
+  criticalIssues: json("critical_issues").$type<Record<string, any>[]>(),
 });
 
 export const insertAnalysisResultSchema = createInsertSchema(analysisResults).omit({
