@@ -143,7 +143,17 @@ export default function DashboardPage() {
         try {
           await apiRequest('POST', '/api/analysis', {
             sessionId,
-            data: processedData,
+            totalRecords: processedData.totalRecords || 0,
+            outliers: processedData.outputs.outliers,
+            normal: processedData.outputs.normal,
+            delayed: processedData.outputs.delayed,
+            healthScore: processedData.healthScore,
+            revenueImpact: processedData.revenueImpact,
+            avgDelayDays: processedData.avgDelayDays,
+            monthlyWaste: processedData.monthlyWaste,
+            matrixData: processedData.matrix,
+            problemData: processedData.problems,
+            criticalIssues: processedData.criticalIssues || [],
           });
         } catch (error) {
           console.error('Failed to save analysis:', error);
