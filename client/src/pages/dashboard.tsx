@@ -2,32 +2,93 @@ import { useState, useEffect } from "react";
 import { TunnelAnimation } from "@/components/dashboard/tunnel-animation";
 import { MatrixGrid } from "@/components/dashboard/matrix-grid";
 import { ProblemSection } from "@/components/dashboard/problem-section";
+import { FileUpload } from "@/components/dashboard/file-upload";
 import { generateSyntheticData, DashboardData, MatrixCell } from "@/lib/procurement-data";
+import { processExcelFile } from "@/lib/excel-processor";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Play, Activity, TrendingUp, DollarSign, ArrowRight } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Upload, Play, Activity, TrendingUp, DollarSign, ArrowRight, Database, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardPage() {
+  const [mode, setMode] = useState<'prototype' | 'live'>('prototype');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasData, setHasData] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   const [filter, setFilter] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
   const [data, setData] = useState<DashboardData>(generateSyntheticData('monthly'));
+  const [liveData, setLiveData] = useState<DashboardData | null>(null);
   const [selectedCell, setSelectedCell] = useState<{category: string, velocity: string, cell: MatrixCell} | null>(null);
+  const { toast } = useToast();
 
+  // Reset when switching modes
   useEffect(() => {
-    setData(generateSyntheticData(filter));
-  }, [filter]);
+    if (mode === 'prototype') {
+      setHasData(true); // Prototype always has data
+      setData(generateSyntheticData(filter));
+    } else {
+      // Live mode
+      if (liveData) {
+        setData(liveData);
+        setHasData(true);
+      } else {
+        setHasData(false);
+        setData(generateSyntheticData('monthly')); // Fallback structure
+      }
+    }
+  }, [mode, filter, liveData]);
 
   const handleStartAnalysis = () => {
+    if (mode === 'live') {
+      setShowUpload(true);
+    } else {
+      // Prototype Simulation
+      setIsAnalyzing(true);
+      setHasData(false); // Briefly hide data to show tunnel
+      setTimeout(() => {
+        setHasData(true);
+        setIsAnalyzing(false); 
+        toast({
+          title: "Analysis Complete",
+          description: "Prototype data loaded successfully.",
+        });
+      }, 3000);
+    }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    setShowUpload(false);
     setIsAnalyzing(true);
-    setTimeout(() => {
-      setHasData(true);
-      setIsAnalyzing(false); 
-    }, 3000);
+    setHasData(false);
+
+    try {
+      // Wait 2 seconds for animation effect + processing
+      const processedData = await processExcelFile(file);
+      
+      setTimeout(() => {
+        setLiveData(processedData);
+        setData(processedData);
+        setHasData(true);
+        setIsAnalyzing(false);
+        toast({
+          title: "File Processed Successfully",
+          description: `Analyzed ${file.name} with dynamic column mapping.`,
+        });
+      }, 3000); // 3s animation
+    } catch (error) {
+      setIsAnalyzing(false);
+      toast({
+        title: "Processing Failed",
+        description: "Could not parse the Excel file. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -44,34 +105,67 @@ export default function DashboardPage() {
             </h1>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
+            {/* Mode Switcher */}
+            <div className="flex items-center gap-2 bg-white/5 p-1 rounded-full border border-white/10">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setMode('prototype')}
+                className={cn(
+                  "rounded-full h-7 text-xs px-3 hover:bg-transparent hover:text-white",
+                  mode === 'prototype' ? "bg-primary text-black hover:bg-primary hover:text-black" : "text-muted-foreground"
+                )}
+              >
+                Prototype
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setMode('live')}
+                className={cn(
+                  "rounded-full h-7 text-xs px-3 hover:bg-transparent hover:text-white",
+                  mode === 'live' ? "bg-green-500 text-black hover:bg-green-500 hover:text-black" : "text-muted-foreground"
+                )}
+              >
+                Live Data
+              </Button>
+            </div>
+
             {hasData && (
               <Link href="/roadmap">
-                <Button variant="outline" className="border-primary/50 text-primary hover:bg-primary/10">
+                <Button variant="outline" className="hidden md:flex border-primary/50 text-primary hover:bg-primary/10">
                   View Solution Roadmap
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
             )}
-            {!hasData && (
+
+            {!hasData && !isAnalyzing && mode === 'live' && (
               <Button 
                 onClick={handleStartAnalysis} 
-                disabled={isAnalyzing}
-                className="bg-primary text-black hover:bg-primary/90"
+                className="bg-green-500 text-black hover:bg-green-600"
               >
-                {isAnalyzing ? (
-                  <Activity className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Play className="mr-2 h-4 w-4" />
-                )}
-                {isAnalyzing ? "Analyzing..." : "Start Analysis"}
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Data
               </Button>
             )}
-            {hasData && (
-              <div className="hidden md:flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Data Source:</span>
-                <span className="text-sm font-mono text-primary bg-primary/10 px-2 py-1 rounded">raw_procurement_data.csv</span>
-              </div>
+
+            {!hasData && !isAnalyzing && mode === 'prototype' && (
+              <Button 
+                onClick={handleStartAnalysis} 
+                className="bg-primary text-black hover:bg-primary/90"
+              >
+                <Play className="mr-2 h-4 w-4" />
+                Re-Run Analysis
+              </Button>
+            )}
+
+            {isAnalyzing && (
+               <Button disabled className="bg-white/10 text-white">
+                 <Activity className="mr-2 h-4 w-4 animate-spin" />
+                 Processing...
+               </Button>
             )}
           </div>
         </div>
@@ -82,7 +176,15 @@ export default function DashboardPage() {
         {/* Top Section: Tunnel & Controls */}
         <section className="space-y-6">
           <div className="flex justify-between items-center">
-             <h2 className="text-xl text-white font-medium">Data Ingestion Pipeline</h2>
+             <div className="flex items-center gap-3">
+                <h2 className="text-xl text-white font-medium">Data Ingestion Pipeline</h2>
+                {mode === 'live' && hasData && (
+                  <span className="text-xs bg-green-500/10 text-green-400 px-2 py-1 rounded border border-green-500/20 flex items-center gap-1">
+                    <Database className="h-3 w-3" /> Live Source
+                  </span>
+                )}
+             </div>
+             
              {hasData && (
                <Tabs defaultValue="monthly" onValueChange={(v) => setFilter(v as any)} className="w-[400px]">
                  <TabsList className="grid w-full grid-cols-4 bg-white/5">
@@ -95,7 +197,7 @@ export default function DashboardPage() {
              )}
           </div>
           
-          <TunnelAnimation isActive={isAnalyzing || hasData} />
+          <TunnelAnimation isActive={isAnalyzing || (hasData && mode === 'prototype')} />
         </section>
 
         <AnimatePresence>
@@ -164,13 +266,38 @@ export default function DashboardPage() {
         </AnimatePresence>
 
         {!hasData && !isAnalyzing && (
-          <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
-            <Upload className="h-12 w-12 mb-4 opacity-50" />
-            <p>Upload raw procurement data to begin analysis</p>
-            <p className="text-xs opacity-50 mt-2">Supported formats: CSV, Excel, JSON</p>
+          <div className="flex flex-col items-center justify-center h-40 text-muted-foreground border-2 border-dashed border-white/10 rounded-xl">
+             {mode === 'live' ? (
+               <>
+                 <Upload className="h-12 w-12 mb-4 opacity-50" />
+                 <p>Upload raw procurement data to begin analysis</p>
+                 <Button variant="link" onClick={() => setShowUpload(true)} className="text-primary mt-2">
+                   Click to Upload
+                 </Button>
+               </>
+             ) : (
+               <>
+                 <Database className="h-12 w-12 mb-4 opacity-50" />
+                 <p>Prototype Mode Active</p>
+                 <Button variant="link" onClick={handleStartAnalysis} className="text-primary mt-2">
+                   Start Simulation
+                 </Button>
+               </>
+             )}
           </div>
         )}
       </main>
+
+      {/* Upload Modal */}
+      <AnimatePresence>
+        {showUpload && (
+          <FileUpload 
+            onFileUpload={handleFileUpload} 
+            onCancel={() => setShowUpload(false)} 
+            isProcessing={isAnalyzing}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Details Drawer */}
       <Sheet open={!!selectedCell} onOpenChange={() => setSelectedCell(null)}>
