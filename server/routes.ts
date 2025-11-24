@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUploadedFileSchema, insertAnalysisResultSchema, insertClaudeAnalysisResultSchema } from "@shared/schema";
-import { analyzeFileWithClaude } from "./services/claudeAPIService";
+import { analyzeFileWithClaude, analyzeMultipleFilesWithClaude } from "./services/claudeAPIService";
 import multer from "multer";
 import { z } from "zod";
 
@@ -187,6 +187,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get Claude analysis error:", error);
       res.status(500).json({ error: "Failed to retrieve Claude analysis result" });
+    }
+  });
+
+  // Combined analysis endpoint for multiple files
+  app.post("/api/analyze-combined", async (req, res) => {
+    try {
+      const { sessionId, fileIds } = req.body;
+
+      if (!sessionId) {
+        return res.status(400).json({ error: "Session ID required" });
+      }
+
+      if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
+        return res.status(400).json({ error: "At least one file ID required" });
+      }
+
+      // Retrieve all uploaded files for the session
+      const uploadedFiles = await storage.getUploadedFiles(sessionId);
+      
+      // Filter files by the provided IDs
+      const filesToAnalyze = uploadedFiles.filter(f => fileIds.includes(f.id));
+
+      if (filesToAnalyze.length === 0) {
+        return res.status(400).json({ error: "No valid files found for analysis" });
+      }
+
+      // Prepare file contents for combined analysis
+      const fileContents = filesToAnalyze.map(file => ({
+        fileName: file.originalName,
+        content: file.content,
+        fileType: file.fileType,
+      }));
+
+      // Perform combined analysis
+      const analysisResult = await analyzeMultipleFilesWithClaude({ fileContents });
+
+      // Save combined analysis result
+      const claudeAnalysisData = insertClaudeAnalysisResultSchema.parse({
+        sessionId,
+        fileId: `combined_${fileIds.join('_')}`, // Special ID for combined analysis
+        dataSufficiency: analysisResult.dataSufficiency,
+        qualityScore: analysisResult.qualityScore,
+        uiRenderingDecision: analysisResult.uiRenderingDecision,
+        missingColumns: analysisResult.missingColumns,
+        columnMappings: analysisResult.columnMappings,
+        dataQualityIssues: analysisResult.dataQualityIssues,
+        dataPreview: analysisResult.dataPreview,
+        recommendations: analysisResult.recommendations,
+        rawClaudeResponse: JSON.stringify(analysisResult),
+      });
+
+      const savedAnalysis = await storage.saveClaudeAnalysisResult(claudeAnalysisData);
+
+      res.json({
+        analysis: savedAnalysis,
+        filesAnalyzed: filesToAnalyze.length,
+      });
+    } catch (error) {
+      console.error("Combined analysis error:", error);
+      res.status(500).json({ 
+        error: "Failed to perform combined analysis",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 

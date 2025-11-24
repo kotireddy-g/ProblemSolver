@@ -74,6 +74,7 @@ export function FileReviewContainer({
     preview: false,
   });
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isCombiningData, setIsCombiningData] = useState(false);
   const { toast } = useToast();
 
   // Fetch analysis results for the session
@@ -137,6 +138,56 @@ export function FileReviewContainer({
       });
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleCombineAndAnalyze = async () => {
+    if (analysisResults.length === 0) {
+      toast({
+        title: "No Files",
+        description: "Please upload at least one file first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsCombiningData(true);
+    
+    try {
+      const fileIds = analysisResults.map(result => result.fileId);
+      
+      const response = await fetch('/api/analyze-combined', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId,
+          fileIds,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Combined analysis failed');
+      }
+
+      const result = await response.json();
+      
+      // Refresh analysis results to include the combined analysis
+      await fetchAnalysisResults();
+      
+      toast({
+        title: "Combined Analysis Complete",
+        description: `Successfully analyzed ${result.filesAnalyzed} files together`,
+      });
+    } catch (error) {
+      toast({
+        title: "Combined Analysis Failed",
+        description: error instanceof Error ? error.message : "Failed to analyze combined data",
+        variant: "destructive"
+      });
+    } finally {
+      setIsCombiningData(false);
     }
   };
 
@@ -350,6 +401,26 @@ export function FileReviewContainer({
             <Card>
               <CardContent className="pt-6">
                 <div className="flex flex-wrap gap-4 justify-center">
+                  {analysisResults.length > 1 && (
+                    <Button
+                      onClick={handleCombineAndAnalyze}
+                      disabled={isCombiningData}
+                      className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+                    >
+                      {isCombiningData ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Combining Data...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="h-4 w-4" />
+                          Combine & Analyze All Files
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  
                   <Button
                     onClick={() => onProceedWithData(selectedFile)}
                     disabled={!canProceed}

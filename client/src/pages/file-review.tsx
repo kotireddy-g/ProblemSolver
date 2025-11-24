@@ -23,12 +23,12 @@ export default function FileReviewPage() {
   }, [params, setLocation]);
 
   const handleProceedWithData = (analysisResult: ClaudeAnalysisResult) => {
-    // Store analysis result in sessionStorage for the dashboard to use
+    // Store analysis result in sessionStorage for the insights page to use
     sessionStorage.setItem('claudeAnalysisResult', JSON.stringify(analysisResult));
     sessionStorage.setItem('proceedWithAnalysis', 'true');
     
-    // Navigate back to dashboard with the session ID
-    setLocation(`/?session=${sessionId}&mode=live`);
+    // Navigate to insights page with the session ID
+    setLocation(`/insights/${sessionId}`);
     
     toast({
       title: "Analysis Complete",
