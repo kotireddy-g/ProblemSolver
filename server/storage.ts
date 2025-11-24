@@ -4,7 +4,9 @@ import {
   type UploadedFile,
   type InsertUploadedFile,
   type AnalysisResult,
-  type InsertAnalysisResult
+  type InsertAnalysisResult,
+  type ClaudeAnalysisResult,
+  type InsertClaudeAnalysisResult
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -21,17 +23,25 @@ export interface IStorage {
   saveAnalysisResult(result: InsertAnalysisResult): Promise<AnalysisResult>;
   getAnalysisResult(sessionId: string): Promise<AnalysisResult | undefined>;
   deleteAnalysisResult(sessionId: string): Promise<void>;
+  
+  saveClaudeAnalysisResult(result: InsertClaudeAnalysisResult): Promise<ClaudeAnalysisResult>;
+  getClaudeAnalysisResult(sessionId: string, fileId: string): Promise<ClaudeAnalysisResult | undefined>;
+  getClaudeAnalysisResults(sessionId: string): Promise<ClaudeAnalysisResult[]>;
+  deleteClaudeAnalysisResult(sessionId: string, fileId: string): Promise<void>;
+  deleteAllClaudeAnalysisResults(sessionId: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private uploadedFiles: Map<string, UploadedFile>;
   private analysisResults: Map<string, AnalysisResult>;
+  private claudeAnalysisResults: Map<string, ClaudeAnalysisResult>;
 
   constructor() {
     this.users = new Map();
     this.uploadedFiles = new Map();
     this.analysisResults = new Map();
+    this.claudeAnalysisResults = new Map();
   }
 
   async getUser(id: string): Promise<User | undefined> {
@@ -101,6 +111,46 @@ export class MemStorage implements IStorage {
 
   async deleteAnalysisResult(sessionId: string): Promise<void> {
     this.analysisResults.delete(sessionId);
+  }
+
+  async saveClaudeAnalysisResult(insertResult: InsertClaudeAnalysisResult): Promise<ClaudeAnalysisResult> {
+    const id = randomUUID();
+    const result: ClaudeAnalysisResult = {
+      ...insertResult,
+      id,
+      analyzedAt: new Date(),
+      missingColumns: insertResult.missingColumns ?? null,
+      dataQualityIssues: insertResult.dataQualityIssues ?? null,
+      recommendations: insertResult.recommendations ?? null,
+      rawClaudeResponse: insertResult.rawClaudeResponse ?? null,
+    };
+    const key = `${insertResult.sessionId}-${insertResult.fileId}`;
+    this.claudeAnalysisResults.set(key, result);
+    return result;
+  }
+
+  async getClaudeAnalysisResult(sessionId: string, fileId: string): Promise<ClaudeAnalysisResult | undefined> {
+    const key = `${sessionId}-${fileId}`;
+    return this.claudeAnalysisResults.get(key);
+  }
+
+  async getClaudeAnalysisResults(sessionId: string): Promise<ClaudeAnalysisResult[]> {
+    return Array.from(this.claudeAnalysisResults.values())
+      .filter(result => result.sessionId === sessionId)
+      .sort((a, b) => b.analyzedAt.getTime() - a.analyzedAt.getTime());
+  }
+
+  async deleteClaudeAnalysisResult(sessionId: string, fileId: string): Promise<void> {
+    const key = `${sessionId}-${fileId}`;
+    this.claudeAnalysisResults.delete(key);
+  }
+
+  async deleteAllClaudeAnalysisResults(sessionId: string): Promise<void> {
+    const keysToDelete = Array.from(this.claudeAnalysisResults.entries())
+      .filter(([_, result]) => result.sessionId === sessionId)
+      .map(([key]) => key);
+    
+    keysToDelete.forEach(key => this.claudeAnalysisResults.delete(key));
   }
 }
 

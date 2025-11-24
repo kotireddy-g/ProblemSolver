@@ -60,3 +60,46 @@ export const insertAnalysisResultSchema = createInsertSchema(analysisResults).om
 
 export type InsertAnalysisResult = z.infer<typeof insertAnalysisResultSchema>;
 export type AnalysisResult = typeof analysisResults.$inferSelect;
+
+// Claude Analysis Results Schema
+export const claudeAnalysisResults = pgTable("claude_analysis_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull(),
+  fileId: varchar("file_id").notNull(),
+  analyzedAt: timestamp("analyzed_at").notNull().defaultNow(),
+  dataSufficiency: varchar("data_sufficiency", { enum: ["COMPLETE", "PARTIAL", "INSUFFICIENT"] }).notNull(),
+  qualityScore: integer("quality_score").notNull(), // 0-100
+  uiRenderingDecision: varchar("ui_rendering_decision", { enum: ["USE_STANDARD_UI", "USE_CUSTOM_UI"] }).notNull(),
+  missingColumns: json("missing_columns").$type<{
+    column: string;
+    importance: "Critical" | "High" | "Medium" | "Low";
+    description: string;
+  }[]>(),
+  columnMappings: json("column_mappings").$type<{
+    originalName: string;
+    standardName: string;
+    dataType: string;
+    completenessPercentage: number;
+  }[]>().notNull(),
+  dataQualityIssues: json("data_quality_issues").$type<{
+    type: string;
+    description: string;
+    affectedRows: number[];
+    severity: "Critical" | "High" | "Medium" | "Low";
+  }[]>(),
+  dataPreview: json("data_preview").$type<Record<string, any>[]>().notNull(),
+  recommendations: json("recommendations").$type<{
+    action: string;
+    description: string;
+    priority: "Critical" | "High" | "Medium" | "Low";
+  }[]>(),
+  rawClaudeResponse: text("raw_claude_response"),
+});
+
+export const insertClaudeAnalysisResultSchema = createInsertSchema(claudeAnalysisResults).omit({
+  id: true,
+  analyzedAt: true,
+});
+
+export type InsertClaudeAnalysisResult = z.infer<typeof insertClaudeAnalysisResultSchema>;
+export type ClaudeAnalysisResult = typeof claudeAnalysisResults.$inferSelect;

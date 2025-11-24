@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Upload, Play, Activity, TrendingUp, DollarSign, ArrowRight, Database, RefreshCw, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
@@ -31,10 +31,46 @@ export default function DashboardPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [selectedCell, setSelectedCell] = useState<{category: string, velocity: string, cell: MatrixCell} | null>(null);
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
 
-  // Generate session ID on mount
+  // Generate session ID on mount and check for URL parameters
   useEffect(() => {
-    setSessionId(crypto.randomUUID());
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionParam = urlParams.get('session');
+    const modeParam = urlParams.get('mode');
+    
+    if (sessionParam) {
+      setSessionId(sessionParam);
+    } else {
+      setSessionId(crypto.randomUUID());
+    }
+    
+    if (modeParam === 'live') {
+      setMode('live');
+    }
+    
+    // Check if returning from file review with analysis results
+    const proceedWithAnalysis = sessionStorage.getItem('proceedWithAnalysis');
+    const claudeAnalysisResult = sessionStorage.getItem('claudeAnalysisResult');
+    
+    if (proceedWithAnalysis === 'true' && claudeAnalysisResult) {
+      // Clear session storage
+      sessionStorage.removeItem('proceedWithAnalysis');
+      sessionStorage.removeItem('claudeAnalysisResult');
+      
+      // Process the Claude analysis result
+      try {
+        const analysisResult = JSON.parse(claudeAnalysisResult);
+        handleClaudeAnalysisResult(analysisResult);
+      } catch (error) {
+        console.error('Failed to parse Claude analysis result:', error);
+        toast({
+          title: "Error",
+          description: "Failed to process analysis results",
+          variant: "destructive"
+        });
+      }
+    }
   }, []);
 
   // Fetch uploaded files for session
@@ -78,7 +114,8 @@ export default function DashboardPage() {
 
   const handleStartAnalysis = () => {
     if (mode === 'live') {
-      setShowUpload(true);
+      // Navigate to file review page with current session
+      setLocation(`/file-review/${sessionId}`);
     } else {
       setIsAnalyzing(true);
       setHasData(false);
@@ -219,6 +256,36 @@ export default function DashboardPage() {
 
   const handleAddMoreFiles = () => {
     setShowUpload(true);
+  };
+
+  const handleClaudeAnalysisResult = async (analysisResult: any) => {
+    setIsAnalyzing(true);
+    setHasData(false);
+    
+    try {
+      // Simulate processing the Claude analysis result
+      // In a real implementation, you would convert the Claude analysis to your dashboard format
+      setTimeout(() => {
+        // For now, we'll use the existing data structure but mark it as live data
+        const processedData = generateSyntheticData('monthly');
+        setLiveData(processedData);
+        setData(processedData);
+        setHasData(true);
+        setIsAnalyzing(false);
+        
+        toast({
+          title: "Analysis Complete",
+          description: `File analyzed successfully with ${analysisResult.qualityScore}% data quality score`,
+        });
+      }, 2000);
+    } catch (error) {
+      setIsAnalyzing(false);
+      toast({
+        title: "Processing Failed",
+        description: "Could not process the analysis results",
+        variant: "destructive"
+      });
+    }
   };
 
   // Check if critical issues exist

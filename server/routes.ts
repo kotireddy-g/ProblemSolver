@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUploadedFileSchema, insertAnalysisResultSchema } from "@shared/schema";
+import { insertUploadedFileSchema, insertAnalysisResultSchema, insertClaudeAnalysisResultSchema } from "@shared/schema";
+import { analyzeFileWithClaude } from "./services/claudeAPIService";
 import multer from "multer";
 import { z } from "zod";
 
@@ -99,6 +100,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get analysis error:", error);
       res.status(500).json({ error: "Failed to retrieve analysis" });
+    }
+  });
+
+  // Claude Analysis Endpoints
+  app.post("/api/analyze-upload", upload.single("file"), async (req, res) => {
+    try {
+      const file = req.file as Express.Multer.File;
+      const { sessionId } = req.body;
+
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      if (!sessionId) {
+        return res.status(400).json({ error: "Session ID required" });
+      }
+
+      // First save the uploaded file
+      const fileData = insertUploadedFileSchema.parse({
+        filename: file.originalname,
+        originalName: file.originalname,
+        fileType: file.mimetype,
+        fileSize: file.size,
+        content: file.buffer.toString("utf-8"),
+        sessionId,
+      });
+      const savedFile = await storage.saveUploadedFile(fileData);
+
+      // Analyze with Claude
+      const analysisResult = await analyzeFileWithClaude({
+        fileName: file.originalname,
+        fileContent: file.buffer.toString("utf-8"),
+        fileType: file.mimetype,
+      });
+
+      // Save Claude analysis result
+      const claudeAnalysisData = insertClaudeAnalysisResultSchema.parse({
+        sessionId,
+        fileId: savedFile.id,
+        dataSufficiency: analysisResult.dataSufficiency,
+        qualityScore: analysisResult.qualityScore,
+        uiRenderingDecision: analysisResult.uiRenderingDecision,
+        missingColumns: analysisResult.missingColumns,
+        columnMappings: analysisResult.columnMappings,
+        dataQualityIssues: analysisResult.dataQualityIssues,
+        dataPreview: analysisResult.dataPreview,
+        recommendations: analysisResult.recommendations,
+        rawClaudeResponse: JSON.stringify(analysisResult),
+      });
+
+      const savedAnalysis = await storage.saveClaudeAnalysisResult(claudeAnalysisData);
+
+      res.json({
+        file: savedFile,
+        analysis: savedAnalysis,
+      });
+    } catch (error) {
+      console.error("Claude analysis error:", error);
+      res.status(500).json({ 
+        error: "Failed to analyze file",
+        details: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
+  app.get("/api/claude-analysis/:sessionId", async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const results = await storage.getClaudeAnalysisResults(sessionId);
+      res.json({ results });
+    } catch (error) {
+      console.error("Get Claude analysis error:", error);
+      res.status(500).json({ error: "Failed to retrieve Claude analysis results" });
+    }
+  });
+
+  app.get("/api/claude-analysis/:sessionId/:fileId", async (req, res) => {
+    try {
+      const { sessionId, fileId } = req.params;
+      const result = await storage.getClaudeAnalysisResult(sessionId, fileId);
+      if (!result) {
+        return res.status(404).json({ error: "Claude analysis not found" });
+      }
+      res.json({ result });
+    } catch (error) {
+      console.error("Get Claude analysis error:", error);
+      res.status(500).json({ error: "Failed to retrieve Claude analysis result" });
     }
   });
 
